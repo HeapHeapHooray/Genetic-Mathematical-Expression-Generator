@@ -209,6 +209,53 @@ class BinaryOpNode(Node):
         return 1 + max(self.left.depth(), self.right.depth())
 
 
+class UnaryOpNode(Node):
+    """Represents a unary operator (sin, cos)."""
+    def __init__(self, op, child):
+        self.op = op # 'sin', 'cos'
+        self.child = child
+        
+    def evaluate(self, n):
+        val = self.child.evaluate(n)
+        if math.isnan(val) or math.isinf(val):
+            return float('nan')
+            
+        try:
+            if self.op == 'sin':
+                res = math.sin(val)
+            elif self.op == 'cos':
+                res = math.cos(val)
+            else:
+                return float('nan')
+        except (ValueError, OverflowError):
+            return float('nan')
+            
+        if math.isnan(res) or math.isinf(res) or abs(res) > 1e12:
+            return float('nan')
+            
+        return res
+        
+    def clone(self):
+        return UnaryOpNode(self.op, self.child.clone())
+        
+    def __str__(self):
+        return f"{self.op}({self.child})"
+        
+    def to_formatted_string(self):
+        return f"{self.op}({self.child.to_formatted_string()})"
+        
+    def get_nodes_with_relations(self, parent=None, rel_idx=0):
+        relations = [(self, parent, rel_idx)]
+        relations.extend(self.child.get_nodes_with_relations(self, 0))
+        return relations
+        
+    def size(self):
+        return 1 + self.child.size()
+        
+    def depth(self):
+        return 1 + self.child.depth()
+
+
 # =====================================================================
 # 2. Algebraic Simplification Engine
 # =====================================================================
@@ -292,6 +339,28 @@ def simplify_step(node):
                     
         return BinaryOpNode(node.op, left_sim, right_sim)
         
+    if isinstance(node, UnaryOpNode):
+        child_sim = simplify_step(node.child)
+        
+        # Unary constant folding
+        if isinstance(child_sim, ConstantNode):
+            temp = UnaryOpNode(node.op, child_sim)
+            val = temp.evaluate(0)
+            if not math.isnan(val) and not math.isinf(val):
+                if val.is_integer():
+                    return ConstantNode(int(val))
+                return ConstantNode(round(val, 6))
+                
+        # Unary identity reductions
+        if node.op == 'sin':
+            if isinstance(child_sim, ConstantNode) and child_sim.value == 0:
+                return ConstantNode(0)
+        if node.op == 'cos':
+            if isinstance(child_sim, ConstantNode) and child_sim.value == 0:
+                return ConstantNode(1)
+                
+        return UnaryOpNode(node.op, child_sim)
+        
     return node.clone()
 
 
@@ -330,9 +399,13 @@ def generate_random_tree(depth, max_depth, method, operators, constants_range, v
     # Force operator at root to avoid degenerate single-node expressions
     if depth == 0:
         op = random.choice(operators)
-        left = generate_random_tree(depth + 1, max_depth, method, operators, constants_range, variables)
-        right = generate_random_tree(depth + 1, max_depth, method, operators, constants_range, variables)
-        return BinaryOpNode(op, left, right)
+        if op in ['sin', 'cos']:
+            child = generate_random_tree(depth + 1, max_depth, method, operators, constants_range, variables)
+            return UnaryOpNode(op, child)
+        else:
+            left = generate_random_tree(depth + 1, max_depth, method, operators, constants_range, variables)
+            right = generate_random_tree(depth + 1, max_depth, method, operators, constants_range, variables)
+            return BinaryOpNode(op, left, right)
         
     if method == 'grow':
         # 50% chance of leaf, 50% chance of operator
@@ -344,15 +417,23 @@ def generate_random_tree(depth, max_depth, method, operators, constants_range, v
                 return ConstantNode(val)
         else:
             op = random.choice(operators)
-            left = generate_random_tree(depth + 1, max_depth, method, operators, constants_range, variables)
-            right = generate_random_tree(depth + 1, max_depth, method, operators, constants_range, variables)
-            return BinaryOpNode(op, left, right)
+            if op in ['sin', 'cos']:
+                child = generate_random_tree(depth + 1, max_depth, method, operators, constants_range, variables)
+                return UnaryOpNode(op, child)
+            else:
+                left = generate_random_tree(depth + 1, max_depth, method, operators, constants_range, variables)
+                right = generate_random_tree(depth + 1, max_depth, method, operators, constants_range, variables)
+                return BinaryOpNode(op, left, right)
     else:
         # Full method: select operators at all intermediate levels
         op = random.choice(operators)
-        left = generate_random_tree(depth + 1, max_depth, method, operators, constants_range, variables)
-        right = generate_random_tree(depth + 1, max_depth, method, operators, constants_range, variables)
-        return BinaryOpNode(op, left, right)
+        if op in ['sin', 'cos']:
+            child = generate_random_tree(depth + 1, max_depth, method, operators, constants_range, variables)
+            return UnaryOpNode(op, child)
+        else:
+            left = generate_random_tree(depth + 1, max_depth, method, operators, constants_range, variables)
+            right = generate_random_tree(depth + 1, max_depth, method, operators, constants_range, variables)
+            return BinaryOpNode(op, left, right)
 
 
 def init_population(pop_size, max_depth, operators, constants_range, variables):
@@ -443,19 +524,25 @@ def crossover(parent1, parent2, max_depth=8):
         if p1 is None:
             offspring1 = node2_clone
         else:
-            if idx1 == 0:
-                p1.left = node2_clone
+            if isinstance(p1, UnaryOpNode):
+                p1.child = node2_clone
             else:
-                p1.right = node2_clone
+                if idx1 == 0:
+                    p1.left = node2_clone
+                else:
+                    p1.right = node2_clone
                 
         # Swap node 1 into parent 2
         if p2 is None:
             offspring2 = node1_clone
         else:
-            if idx2 == 0:
-                p2.left = node1_clone
+            if isinstance(p2, UnaryOpNode):
+                p2.child = node1_clone
             else:
-                p2.right = node1_clone
+                if idx2 == 0:
+                    p2.left = node1_clone
+                else:
+                    p2.right = node1_clone
                 
         # Verify depth limits to prevent bloated trees
         if offspring1.depth() <= max_depth and offspring2.depth() <= max_depth:
@@ -481,10 +568,13 @@ def mutate_subtree(individual, max_depth, operators, constants_range, variables)
     if parent is None:
         return new_subtree
         
-    if rel_idx == 0:
-        parent.left = new_subtree
+    if isinstance(parent, UnaryOpNode):
+        parent.child = new_subtree
     else:
-        parent.right = new_subtree
+        if rel_idx == 0:
+            parent.left = new_subtree
+        else:
+            parent.right = new_subtree
         
     return mutant
 
@@ -517,47 +607,67 @@ def mutate_point(individual, operators, constants_range, variables):
         
         if parent is None:
             return new_node
-        if rel_idx == 0:
-            parent.left = new_node
+        if isinstance(parent, UnaryOpNode):
+            parent.child = new_node
         else:
-            parent.right = new_node
+            if rel_idx == 0:
+                parent.left = new_node
+            else:
+                parent.right = new_node
             
     elif isinstance(target_node, BinaryOpNode):
-        # Swap operator
-        target_node.op = random.choice(operators)
+        # Swap binary operator
+        bin_ops = [op for op in operators if op not in ['sin', 'cos']]
+        target_node.op = random.choice(bin_ops)
+        
+    elif isinstance(target_node, UnaryOpNode):
+        # Swap unary operator
+        target_node.op = 'cos' if target_node.op == 'sin' else 'sin'
         
     return mutant
 
 
 def mutate_shrink(individual):
-    """Replaces a random binary operator subtree with one of its child nodes or a leaf."""
+    """Replaces a random operator subtree with one of its child nodes or a leaf."""
     mutant = individual.clone()
     nodes = mutant.get_nodes_with_relations()
     
-    op_nodes = [info for info in nodes if isinstance(info[0], BinaryOpNode)]
+    op_nodes = [info for info in nodes if isinstance(info[0], (BinaryOpNode, UnaryOpNode))]
     if not op_nodes:
         return mutant # Return original if no operator node is present
         
     target_node, parent, rel_idx = random.choice(op_nodes)
-    choice = random.choice(['left', 'right', 'leaf'])
     
-    if choice == 'left':
-        new_subtree = target_node.left.clone()
-    elif choice == 'right':
-        new_subtree = target_node.right.clone()
+    if isinstance(target_node, UnaryOpNode):
+        choice = random.choice(['child', 'leaf'])
+        if choice == 'child':
+            new_subtree = target_node.child.clone()
+        else:
+            sub_nodes = target_node.get_nodes_with_relations()
+            leaves = [info[0].clone() for info in sub_nodes if isinstance(info[0], (ConstantNode, VariableNode))]
+            new_subtree = random.choice(leaves)
     else:
-        # Find a leaf anywhere inside target node's subtree
-        sub_nodes = target_node.get_nodes_with_relations()
-        leaves = [info[0].clone() for info in sub_nodes if isinstance(info[0], (ConstantNode, VariableNode))]
-        new_subtree = random.choice(leaves)
+        choice = random.choice(['left', 'right', 'leaf'])
+        if choice == 'left':
+            new_subtree = target_node.left.clone()
+        elif choice == 'right':
+            new_subtree = target_node.right.clone()
+        else:
+            # Find a leaf anywhere inside target node's subtree
+            sub_nodes = target_node.get_nodes_with_relations()
+            leaves = [info[0].clone() for info in sub_nodes if isinstance(info[0], (ConstantNode, VariableNode))]
+            new_subtree = random.choice(leaves)
         
     if parent is None:
         return new_subtree
         
-    if rel_idx == 0:
-        parent.left = new_subtree
+    if isinstance(parent, UnaryOpNode):
+        parent.child = new_subtree
     else:
-        parent.right = new_subtree
+        if rel_idx == 0:
+            parent.left = new_subtree
+        else:
+            parent.right = new_subtree
         
     return mutant
 
@@ -657,8 +767,8 @@ def run_gp(target_sequence, start_index=0, max_generations=150, pop_size=600,
     """Executes the Genetic Programming evolution loop to solve a sequence."""
     indices = [float(start_index + i) for i in range(len(target_sequence))]
     
-    # Operator pool
-    operators = ['+', '-', '*', '/', '%', '**']
+    # Operator pool (includes trigonometric functions)
+    operators = ['+', '-', '*', '/', '%', '**', 'sin', 'cos']
     
     # Constants configuration based on sequence type
     # For float targets, search inside a continuous range. Otherwise use integers.
@@ -762,6 +872,7 @@ PRESETS = {
     "5": ("Golden Ratio Power Sequence", [1.0, 1.618, 2.618, 4.236, 6.854, 11.09], 0, True),
     "6": ("Fractional n/(n+2) Ratio Sequence", [0.0, 0.3333, 0.5, 0.6, 0.6667, 0.7143], 0, True),
     "7": ("Fibonacci (Highly complex recursive sequence)", [1.0, 1.0, 2.0, 3.0, 5.0, 8.0, 13.0, 21.0], 1, False),
+    "8": ("Trigonometric Sine Curve (Periodic)", [0.0, 0.8415, 0.9093, 0.1411, -0.7568, -0.9589], 0, True),
 }
 
 def print_banner():
@@ -817,7 +928,7 @@ def interactive_cli():
         print(f"  \033[1;36m{k}\033[0m. {name:<45} (Type: {type_lbl:<5} Sample: {seq_sample})")
     print("  \033[1;36mC\033[0m. Custom sequence entry")
     
-    choice = input("\nEnter choice (1-7 or C, default is 1): ").strip() or "1"
+    choice = input("\nEnter choice (1-8 or C, default is 1): ").strip() or "1"
     
     target_seq = None
     start_index = 0
@@ -958,6 +1069,23 @@ def run_unit_tests():
         test_assert(c1.depth() <= 5 and c2.depth() <= 5, "Crossover: Structural soundness and depth limit")
     except Exception as e:
         test_assert(False, f"Crossover/Mutation test failed: {e}")
+        
+    # Test 6: Trigonometric functions (sin, cos)
+    try:
+        # 1. Unary node evaluation
+        sin_node = UnaryOpNode('sin', ConstantNode(0))
+        cos_node = UnaryOpNode('cos', ConstantNode(0))
+        test_assert(sin_node.evaluate(0) == 0.0, "Trig: sin(0) evaluates to 0.0")
+        test_assert(cos_node.evaluate(0) == 1.0, "Trig: cos(0) evaluates to 1.0")
+        
+        # 2. Formatted stringification
+        test_assert(sin_node.to_formatted_string() == "sin(0)", "Trig Formatting: sin(0) formatted string representation is correct")
+        
+        # 3. Simplification identities sin(0) -> 0, cos(0) -> 1
+        test_assert(fully_simplify(sin_node).value == 0, "Trig Simplification: sin(0) simplifies to ConstantNode 0")
+        test_assert(fully_simplify(cos_node).value == 1, "Trig Simplification: cos(0) simplifies to ConstantNode 1")
+    except Exception as e:
+        test_assert(False, f"Trigonometric tests failed with exception: {e}")
         
     print(f"\nSuite complete. \033[92m{passed} passed\033[0m, \033[91m{failed} failed\033[0m.")
     sys.exit(0 if failed == 0 else 1)

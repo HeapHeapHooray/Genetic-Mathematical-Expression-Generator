@@ -42,6 +42,7 @@ Mathematical formulas are represented as tree structures:
 - `ConstantNode`: Numerical numbers, such as `5` or `-1.618`.
 - `VariableNode`: The index variable `n` (0-based or 1-based index).
 - `BinaryOpNode`: Algebraic binary operators: `+`, `-`, `*`, `/`, `%`, `**`.
+- `UnaryOpNode`: Trigonometric unary operators: `sin`, `cos`.
 
 ### 2. Protected Mathematical Operations
 To ensure the genetic algorithm does not crash due to mathematical edge cases, operators are wrapped with safety logic:
@@ -59,13 +60,14 @@ To ensure the genetic algorithm does not crash due to mathematical edge cases, o
 * **Crossover (Subtree Crossover)**: Swaps random subtrees between two parent trees, discarding attempts that exceed depth limits.
 * **Mutation**: Uses three distinct mutations:
   1. **Subtree Mutation (40% weight)**: Replaces a random subtree with a new random mini-tree.
-  2. **Point Mutation (40% weight)**: Alters a single node in-place. If a float constant is picked, it applies **Gaussian continuous noise** to fine-tune constant coefficients (e.g. optimizing $1.61$ to $1.618$).
-  3. **Shrink Mutation (20% weight)**: Replaces a node with one of its child nodes, reducing formula size.
+  2. **Point Mutation (40% weight)**: Alters a single node in-place. If a float constant is picked, it applies **Gaussian continuous noise** to fine-tune constant coefficients (e.g. optimizing $1.61$ to $1.618$). If a unary operator is picked, it swaps with the other unary operator.
+  3. **Shrink Mutation (20% weight)**: Replaces a node with one of its child nodes or a leaf, reducing formula size.
 
 ### 4. Custom Algebraic Simplifier
-Standard GP often produces expressions like `((n + 0) * 1) + 2`. The symbolic engine simplifies this to `n + 2` by applying recursive reductions:
+Standard GP often produces expressions like `((sin(n) + 0) * 1) + 2`. The symbolic engine simplifies this to `sin(n) + 2` by applying recursive reductions:
 - **Folding**: $c_1 \text{ op } c_2 \to C_{\text{computed}}$ (e.g., $3 \times 4 \to 12$).
 - **Identities**: $x + 0 \to x$, $x - 0 \to x$, $x - x \to 0$, $x \times 1 \to x$, $x \times 0 \to 0$, $x / 1 \to x$, $x / x \to 1$, $x^{1} \to x$, $x^{0} \to 1$.
+- **Trig Identities**: $\sin(0) \to 0$, $\cos(0) \to 1$.
 
 ---
 
