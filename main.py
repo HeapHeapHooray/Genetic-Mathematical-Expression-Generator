@@ -210,9 +210,9 @@ class BinaryOpNode(Node):
 
 
 class UnaryOpNode(Node):
-    """Represents a unary operator (sin, cos)."""
+    """Represents a unary operator (sin, cos, round, floor, ceil)."""
     def __init__(self, op, child):
-        self.op = op # 'sin', 'cos'
+        self.op = op # 'sin', 'cos', 'round', 'floor', 'ceil'
         self.child = child
         
     def evaluate(self, n):
@@ -225,6 +225,12 @@ class UnaryOpNode(Node):
                 res = math.sin(val)
             elif self.op == 'cos':
                 res = math.cos(val)
+            elif self.op == 'round':
+                res = float(round(val))
+            elif self.op == 'floor':
+                res = float(math.floor(val))
+            elif self.op == 'ceil':
+                res = float(math.ceil(val))
             else:
                 return float('nan')
         except (ValueError, OverflowError):
@@ -358,6 +364,9 @@ def simplify_step(node):
         if node.op == 'cos':
             if isinstance(child_sim, ConstantNode) and child_sim.value == 0:
                 return ConstantNode(1)
+        if node.op in ['floor', 'ceil', 'round']:
+            if isinstance(child_sim, UnaryOpNode) and child_sim.op == node.op:
+                return child_sim
                 
         return UnaryOpNode(node.op, child_sim)
         
@@ -399,7 +408,7 @@ def generate_random_tree(depth, max_depth, method, operators, constants_range, v
     # Force operator at root to avoid degenerate single-node expressions
     if depth == 0:
         op = random.choice(operators)
-        if op in ['sin', 'cos']:
+        if op in ['sin', 'cos', 'round', 'floor', 'ceil']:
             child = generate_random_tree(depth + 1, max_depth, method, operators, constants_range, variables)
             return UnaryOpNode(op, child)
         else:
@@ -417,7 +426,7 @@ def generate_random_tree(depth, max_depth, method, operators, constants_range, v
                 return ConstantNode(val)
         else:
             op = random.choice(operators)
-            if op in ['sin', 'cos']:
+            if op in ['sin', 'cos', 'round', 'floor', 'ceil']:
                 child = generate_random_tree(depth + 1, max_depth, method, operators, constants_range, variables)
                 return UnaryOpNode(op, child)
             else:
@@ -427,7 +436,7 @@ def generate_random_tree(depth, max_depth, method, operators, constants_range, v
     else:
         # Full method: select operators at all intermediate levels
         op = random.choice(operators)
-        if op in ['sin', 'cos']:
+        if op in ['sin', 'cos', 'round', 'floor', 'ceil']:
             child = generate_random_tree(depth + 1, max_depth, method, operators, constants_range, variables)
             return UnaryOpNode(op, child)
         else:
@@ -617,12 +626,14 @@ def mutate_point(individual, operators, constants_range, variables):
             
     elif isinstance(target_node, BinaryOpNode):
         # Swap binary operator
-        bin_ops = [op for op in operators if op not in ['sin', 'cos']]
+        bin_ops = [op for op in operators if op not in ['sin', 'cos', 'round', 'floor', 'ceil']]
         target_node.op = random.choice(bin_ops)
         
     elif isinstance(target_node, UnaryOpNode):
         # Swap unary operator
-        target_node.op = 'cos' if target_node.op == 'sin' else 'sin'
+        unary_ops = ['sin', 'cos', 'round', 'floor', 'ceil']
+        choices = [op for op in unary_ops if op != target_node.op]
+        target_node.op = random.choice(choices)
         
     return mutant
 
@@ -767,8 +778,8 @@ def run_gp(target_sequence, start_index=0, max_generations=150, pop_size=600,
     """Executes the Genetic Programming evolution loop to solve a sequence."""
     indices = [float(start_index + i) for i in range(len(target_sequence))]
     
-    # Operator pool (includes trigonometric functions)
-    operators = ['+', '-', '*', '/', '%', '**', 'sin', 'cos']
+    # Operator pool (includes trigonometric and rounding functions)
+    operators = ['+', '-', '*', '/', '%', '**', 'sin', 'cos', 'round', 'floor', 'ceil']
     
     # Constants configuration based on sequence type
     # For float targets, search inside a continuous range. Otherwise use integers.
@@ -1086,6 +1097,26 @@ def run_unit_tests():
         test_assert(fully_simplify(cos_node).value == 1, "Trig Simplification: cos(0) simplifies to ConstantNode 1")
     except Exception as e:
         test_assert(False, f"Trigonometric tests failed with exception: {e}")
+        
+    # Test 7: Round, Floor, Ceil unary functions
+    try:
+        # 1. Unary node evaluation
+        floor_node = UnaryOpNode('floor', ConstantNode(1.7))
+        ceil_node = UnaryOpNode('ceil', ConstantNode(1.2))
+        round_node = UnaryOpNode('round', ConstantNode(2.5))
+        test_assert(floor_node.evaluate(0) == 1.0, "Floor: floor(1.7) evaluates to 1.0")
+        test_assert(ceil_node.evaluate(0) == 2.0, "Ceil: ceil(1.2) evaluates to 2.0")
+        test_assert(round_node.evaluate(0) == 3.0 or round_node.evaluate(0) == 2.0, "Round: round(2.5) evaluates correctly to 2.0 or 3.0")
+        
+        # 2. Formatted stringification
+        test_assert(floor_node.to_formatted_string() == "floor(1.7)", "Floor Formatting: floor(1.7) formatted string representation is correct")
+        
+        # 3. Idempotent simplification floor(floor(n)) -> floor(n)
+        nested_floor = UnaryOpNode('floor', UnaryOpNode('floor', VariableNode('n')))
+        sim_floor = fully_simplify(nested_floor)
+        test_assert(isinstance(sim_floor, UnaryOpNode) and sim_floor.op == 'floor' and isinstance(sim_floor.child, VariableNode), "Floor Simplification: floor(floor(n)) simplifies to floor(n)")
+    except Exception as e:
+        test_assert(False, f"Round/Floor/Ceil tests failed with exception: {e}")
         
     print(f"\nSuite complete. \033[92m{passed} passed\033[0m, \033[91m{failed} failed\033[0m.")
     sys.exit(0 if failed == 0 else 1)

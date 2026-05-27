@@ -44,7 +44,7 @@ Mathematical formulas are represented as tree structures:
 - `ConstantNode`: Numerical numbers, such as `5` or `-1.618`.
 - `VariableNode`: The index variable `n` (0-based or 1-based index).
 - `BinaryOpNode`: Algebraic binary operators: `+`, `-`, `*`, `/`, `%`, `**`.
-- `UnaryOpNode`: Trigonometric unary operators: `sin`, `cos`.
+- `UnaryOpNode`: Unary operators: `sin`, `cos`, `round`, `floor`, `ceil`.
 
 ### 2. Protected Mathematical Operations
 To ensure the genetic algorithm does not crash due to mathematical edge cases, operators are wrapped with safety logic:
@@ -70,6 +70,7 @@ Standard GP often produces expressions like `((sin(n) + 0) * 1) + 2`. The symbol
 - **Folding**: $c_1 \text{ op } c_2 \to C_{\text{computed}}$ (e.g., $3 \times 4 \to 12$).
 - **Identities**: $x + 0 \to x$, $x - 0 \to x$, $x - x \to 0$, $x \times 1 \to x$, $x \times 0 \to 0$, $x / 1 \to x$, $x / x \to 1$, $x^{1} \to x$, $x^{0} \to 1$.
 - **Trig Identities**: $\sin(0) \to 0$, $\cos(0) \to 1$.
+- **Idempotent Identities**: $\text{floor}(\text{floor}(x)) \to \text{floor}(x)$, $\text{ceil}(\text{ceil}(x)) \to \text{ceil}(x)$, $\text{round}(\text{round}(x)) \to \text{round}(x)$.
 
 ---
 
