@@ -1,5 +1,7 @@
 # Genetic Mathematical Expression Generator
 
+*Designed and implemented fully by Gemini 3.5 Flash.*
+
 An elegant, pure Python program that uses **Genetic Programming (GP)** to discover mathematical formulas that match arbitrary number sequences (both integer and floating-point real numbers).
 
 ## Features
