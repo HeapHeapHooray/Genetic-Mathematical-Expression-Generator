@@ -75,5 +75,6 @@ Standard GP often produces expressions like `((sin(n) + 0) * 1) + 2`. The symbol
 ---
 
 ## File Contents
-* **[main.py](file:///home/heap/Documents/Playground/genetic-algo/main.py)**: The complete source code containing AST, Evolution pipeline, Visualizations, and test suites.
-* **[README.md](file:///home/heap/Documents/Playground/genetic-algo/README.md)**: User guide and technical specifications (this file).
+* **[main.py](main.py)**: The complete source code containing AST, Evolution pipeline, Visualizations, and test suites.
+* **[README.md](README.md)**: User guide and technical specifications (this file).
+* **[memory.md](memory.md)**: Permanent AI memory bank documenting technical architecture, implementations, and future development roadmaps.
